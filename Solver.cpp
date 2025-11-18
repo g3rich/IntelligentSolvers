@@ -3,6 +3,7 @@
 #include <queue>
 #include <algorithm>
 #include <unordered_map>
+#include <climits>
 
 Solver::Solver(const Situation& goalSituation, bool debugFlag) : goal(goalSituation), debug(debugFlag), nodesExpanded(0) {}
 
@@ -142,6 +143,136 @@ bool Solver::wideSearch(const Situation& start, int depthLimit) {
     return false;
 }
 
+bool Solver::gradientSearch(const Situation& start, int maxSteps) {
+    nodesExpanded = 0;
+    path.clear();
+    moves.clear();
+
+    Situation current = start;
+    path.push_back(current);
+
+    for (int step = 0; step < maxSteps; ++step) {
+        if (current == goal) return true;
+
+        auto nextStates = current.generateNext();
+        if (nextStates.empty()) break;
+
+        int currentScore = current.heuristic();
+        int bestScore = currentScore;
+        Situation bestNext;
+        char bestMove = '?';
+
+        for (auto &p : nextStates) {
+            int score = p.first.heuristic();
+            if (score < bestScore) {
+                bestScore = score;
+                bestNext = p.first;
+                bestMove = p.second;
+            }
+        }
+
+        // if (bestScore >= currentScore) {
+        //     if (debug) std::wcout << L"[GRADIENT] Локальный минимум на шаге " << step << L"\n";
+        //     return false;
+        // }
+
+        current = bestNext;
+        moves.push_back(bestMove);
+        path.push_back(current);
+        nodesExpanded++;
+
+        if (debug) {
+            std::wcout << L"[GRADIENT] Шаг " << step
+                       << L", оценка: " << bestScore
+                       << L", ход: " << bestMove << L"\n";
+        }
+    }
+
+    return (current == goal);
+}
+
+bool Solver::branchAndBound(const Situation& start, int maxNodes) {
+    struct Node {
+        Situation situation;
+        int depth;          // g — длина пути
+        // int heuristic;      // h — оценка
+        int totalCost;      // f = g + h
+        std::vector<char> path;
+    };
+
+    auto cmp = [](const Node& a, const Node& b) {
+        return a.totalCost > b.totalCost;
+    };
+
+    std::priority_queue<Node, std::vector<Node>, decltype(cmp)> pq(cmp);
+
+    pq.push({start, 0,/* start.heuristic(),*/ start.heuristic(), {}});
+    visitedKeys.clear();
+    nodesExpanded = 0;
+
+    // bool foundSolution = false;
+    int bestBound = INT_MAX;
+
+    while (!pq.empty()) {
+        Node node = pq.top();
+        pq.pop();
+
+        nodesExpanded++;
+
+        // if (foundSolution && node.totalCost >= bestBound) continue;
+
+        if (debug) {
+            // std::wcout << L"[B&B] depth=" << node.depth
+            //            << L" f=" << node.totalCost
+            //            << L" h=" << node.heuristic
+            //            << L" path=";
+            std::wcout << L"[B&B] осталось=" << node.totalCost
+                        << L" depth=" << node.depth
+                       << L" путь=";
+            for (char mv : node.path) std::wcout << mv;
+            std::wcout << L"\n";
+        }
+
+        if (node.situation == goal) {
+            // foundSolution = true;
+            bestBound = node.totalCost;
+
+            moves = node.path;
+            path.clear();
+            Situation s = start;
+            path.push_back(s);
+            for (char mv : moves) {
+                s.move(mv);
+                path.push_back(s);
+            }
+
+            if (debug)
+                std::wcout << L"[B&B] Найдено решение с f=" << bestBound << L"\n";
+
+            return true;
+        }
+
+        for (auto& p : node.situation.generateNext()) {
+            Situation next = p.first;
+            char mv = p.second;
+
+            // int h = next.heuristic();
+            // int g = node.depth + 1;
+            // // int f = g + h;
+            // int f = g + next.heuristic();
+
+            // if (foundSolution && f >= bestBound) continue;
+
+            std::vector<char> newPath = node.path;
+            newPath.push_back(mv);
+
+            pq.push({next, (node.depth + 1),/* h,*/ (node.depth + 1 + next.heuristic()), newPath});
+        }
+    }
+
+    return false;
+}
+
 bool Solver::solve(const Situation& start, SearchType type, int depthLimit) {
     path.clear();
     moves.clear();
@@ -151,8 +282,12 @@ bool Solver::solve(const Situation& start, SearchType type, int depthLimit) {
 
     if (type == SearchType::DepthSearch) {
         return depthSearch_recursive(start, 0, depthLimit);
-    } else {
+    } else if (type == SearchType::WideSearch) {
         return wideSearch(start, depthLimit);
+    } else if (type == SearchType::GradientSearch) {
+        return gradientSearch(start, depthLimit);
+    } else {
+        return branchAndBound(start, depthLimit);
     }
 }
 

@@ -41,6 +41,8 @@ public:
     // ключ для хеширования/сравнения (используется в Solver)
     std::string key() const;
 
+    int heuristic() const;
+
     std::vector<std::vector<int>> getBoard() const { return board; }
 
     bool operator==(const Situation& other) const { return board == other.board; }

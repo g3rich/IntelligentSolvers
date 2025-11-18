@@ -7,7 +7,9 @@
 
 enum class SearchType {
     DepthSearch,
-    WideSearch
+    WideSearch,
+    GradientSearch,
+    BranchAndBoundSearch
 };
 
 class Solver {
@@ -22,6 +24,8 @@ private:
 
     bool depthSearch_recursive(const Situation& current, int depth, int depthLimit);
     bool wideSearch(const Situation& start, int depthLimit);
+    bool gradientSearch(const Situation& start, int maxSteps);
+    bool branchAndBound(const Situation& start, int maxNodes);
 
 public:
     Solver(const Situation& goalSituation, bool debug = false);

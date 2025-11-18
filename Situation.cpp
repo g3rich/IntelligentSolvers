@@ -48,6 +48,18 @@ void Situation::initConcreteBoard() {
         { 9, 6, 14, 11},
         { 13, 15, 10, 12}
     };
+    // board = {
+    //     { 1,  2,  3,  4},
+    //     { 5,  0,  7,  8},  // 0 — пустая клетка
+    //     { 9, 6, 14, 11},
+    //     { 13, 15, 10, 12}
+    // };
+    // board = {
+    //     { 1,  6,  2,  3},
+    //     { 9,  5,  7,  4},  // 0 — пустая клетка
+    //     { 13, 0, 12, 8},
+    //     { 14, 10, 11, 15}
+    // };
 
     // найти и запомнить позицию пустой клетки
     for (int i = 0; i < SIZE; ++i) {
@@ -150,3 +162,16 @@ std::string Situation::key() const {
         }
     return s;
 }
+
+int Situation::heuristic() const {
+    int distance = 0;
+    for (int i = 0; i < SIZE; ++i)
+        for (int j = 0; j < SIZE; ++j)
+            if (board[i][j] != 0) {
+                int correct_i = (board[i][j] - 1) / SIZE;
+                int correct_j = (board[i][j] - 1) % SIZE;
+                distance += abs(i - correct_i) + abs(j - correct_j);
+            }
+    return distance;
+}
+
