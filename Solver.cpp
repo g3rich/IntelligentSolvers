@@ -4,14 +4,24 @@
 #include <algorithm>
 #include <unordered_map>
 #include <climits>
+#include "time.h"
 
-Solver::Solver(const Situation& goalSituation, bool debugFlag) : goal(goalSituation), debug(debugFlag), nodesExpanded(0) {}
+
+
+Solver::Solver(const Situation& goalSituation, bool debugFlag)
+    : goal(goalSituation),
+      debug(debugFlag),
+      nodesExpanded(0),
+      maxDepth(0),
+      solutionLength(0)
+{}
 
 bool Solver::depthSearch_recursive(const Situation& current, int depth, int depthLimit) {
     std::string k = current.key();
 
     // если уже на текущем пути — цикл, отбрасываем
     if (visitedKeys.count(k)) return false;
+    maxDepth = std::max(maxDepth, depth);
 
     // добавляем в путь/visited
     visitedKeys.insert(k);
@@ -26,7 +36,12 @@ bool Solver::depthSearch_recursive(const Situation& current, int depth, int dept
     }
 
     // цель достигнута?
-    if (current == goal) return true;
+    if (current == goal) {
+        solutionLength = moves.size();
+        printStats();
+
+        return true;
+    }
 
     // ходы есть?
     if (depth >= depthLimit) {
@@ -76,6 +91,7 @@ bool Solver::wideSearch(const Situation& start, int depthLimit) {
 
     while (!q.empty()) {
         Node node = q.front(); q.pop();
+    maxDepth = std::max(maxDepth, node.depth);
         std::string key = node.situation.key();
 
         // если обработана — пропускаем (на всякий случай)
@@ -87,7 +103,7 @@ bool Solver::wideSearch(const Situation& start, int depthLimit) {
 
         // debug-вывод прогресса
         if (debug/* && nodesExpanded % 10 == 0*/) {
-            std::wcout << L"[BFS] Просмотрено: " << nodesExpanded
+            std::wcout << L"[WS] Просмотрено: " << nodesExpanded
                        << L", глубина узла: " << node.depth
                        << L", очередь: " << q.size() << L"\n";
         }
@@ -113,6 +129,9 @@ bool Solver::wideSearch(const Situation& start, int depthLimit) {
                 s.move(mv);
                 path.push_back(s);
             }
+
+            solutionLength = moves.size();
+            printStats();
 
             return true;
         }
@@ -152,7 +171,13 @@ bool Solver::gradientSearch(const Situation& start, int maxSteps) {
     path.push_back(current);
 
     for (int step = 0; step < maxSteps; ++step) {
-        if (current == goal) return true;
+        maxDepth = std::max(maxDepth, step);
+        if (current == goal) {
+            solutionLength = moves.size();
+            printStats();
+
+            return true;
+        }
 
         auto nextStates = current.generateNext();
         if (nextStates.empty()) break;
@@ -216,6 +241,7 @@ bool Solver::branchAndBound(const Situation& start, int maxNodes) {
     while (!pq.empty()) {
         Node node = pq.top();
         pq.pop();
+        maxDepth = std::max(maxDepth, node.depth);
 
         nodesExpanded++;
 
@@ -249,6 +275,9 @@ bool Solver::branchAndBound(const Situation& start, int maxNodes) {
             if (debug)
                 std::wcout << L"[B&B] Найдено решение с f=" << bestBound << L"\n";
 
+            solutionLength = moves.size();
+            printStats();
+
             return true;
         }
 
@@ -273,11 +302,110 @@ bool Solver::branchAndBound(const Situation& start, int maxNodes) {
     return false;
 }
 
+bool Solver::uniformCostSearch(const Situation& start, int maxNodes) {
+    struct Node {
+        Situation situation;
+        int g;                     // длина пути до этой ситуации
+        std::vector<char> path;    // путь
+    };
+
+    // очередь с приоритетом по g (чем меньше — тем выше)
+    auto cmp = [](const Node& a, const Node& b) {
+        return a.g > b.g;
+    };
+    std::priority_queue<Node, std::vector<Node>, decltype(cmp)> pq(cmp);
+
+    // bestDistance[key] = минимальная найденная длина пути
+    std::unordered_map<std::string, int> bestDistance;
+
+    std::string startKey = start.key();
+    bestDistance[startKey] = 0;
+    pq.push({start, 0, {}});
+
+    nodesExpanded = 0;
+    visitedKeys.clear();
+
+    while (!pq.empty()) {
+        Node node = pq.top();
+        pq.pop();
+        maxDepth = std::max(maxDepth, node.g);
+
+        nodesExpanded++;
+        std::string key = node.situation.key();
+
+        if (debug) {
+            std::wcout  << L"[UCS] Просмотрено: " << nodesExpanded
+                        << L" g=" << node.g
+                       << L" путь=";
+            for (char mv : node.path) std::wcout << mv;
+            std::wcout << L"\n";
+        }
+
+        // цель достигнута?
+        if (node.situation == goal) {
+            moves = node.path;
+
+            path.clear();
+            Situation s = start;
+            path.push_back(s);
+            for (char mv : moves) {
+                s.move(mv);
+                path.push_back(s);
+            }
+
+            if (debug)
+                std::wcout << L"[UCS] Найден оптимальный путь длиной " << node.g << L"\n";
+
+            solutionLength = moves.size();
+            printStats();
+            return true;
+        }
+
+        // развиваем вершины
+        for (auto& p : node.situation.generateNext()) {
+            Situation next = p.first;
+            char mv = p.second;
+
+            int newG = node.g + 1;
+            std::string nk = next.key();
+
+            // Если такой ситуации никогда не было — добавляем
+            if (!bestDistance.count(nk)) {
+                bestDistance[nk] = newG;
+
+                auto newPath = node.path;
+                newPath.push_back(mv);
+
+                pq.push({next, newG, newPath});
+                continue;
+            }
+
+            // Если нашли более короткий путь — обновляем
+            if (newG < bestDistance[nk]) {
+                bestDistance[nk] = newG;
+
+                auto newPath = node.path;
+                newPath.push_back(mv);
+
+                pq.push({next, newG, newPath});
+            }
+            // или — старый путь лучше
+        }
+    }
+
+    return false;
+}
+
 bool Solver::solve(const Situation& start, SearchType type, int depthLimit) {
     path.clear();
     moves.clear();
     visitedKeys.clear();
     nodesExpanded = 0;
+    maxDepth = 0;
+    solutionLength = 0;
+    startTime = time(NULL);
+
+
     // return dfs_recursive(start, 0, depthLimit);
 
     if (type == SearchType::DepthSearch) {
@@ -286,8 +414,10 @@ bool Solver::solve(const Situation& start, SearchType type, int depthLimit) {
         return wideSearch(start, depthLimit);
     } else if (type == SearchType::GradientSearch) {
         return gradientSearch(start, depthLimit);
-    } else {
+    } else if (type == SearchType::BranchAndBoundSearch) {
         return branchAndBound(start, depthLimit);
+    } else {
+        return uniformCostSearch(start, depthLimit);
     }
 }
 
@@ -301,4 +431,16 @@ void Solver::printSolution() const {
         }
         path[i].printBoard();
     }
+}
+
+void Solver::printStats() const {
+    time_t seconds = (time(NULL)*1000 - startTime*1000);
+    float efficiency = (float) seconds / nodesExpanded;
+    std::wcout << L"==== Статистика поиска ====\n";
+    std::wcout << L"Глубина поиска: " << maxDepth << L"\n";
+    std::wcout << L"Длина решения: " << solutionLength << L"\n";
+    std::wcout << L"Порождено вершин: " << nodesExpanded << L"\n";
+    std::wcout << L"Средняя разветвленность: " << getBranchingFactor() << L"\n";
+    //std::wcout << L"Эффективность просмотра: " << seconds << L"\n";
+    std::wcout << L"Эффективность просмотра: " << efficiency << L"\n";
 }

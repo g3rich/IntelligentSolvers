@@ -9,7 +9,8 @@ enum class SearchType {
     DepthSearch,
     WideSearch,
     GradientSearch,
-    BranchAndBoundSearch
+    BranchAndBoundSearch,
+    UniformCostSearch
 };
 
 class Solver {
@@ -21,11 +22,17 @@ private:
 
     bool debug;
     long long nodesExpanded;
+    int maxDepth;                   // новая метрика
+    int solutionLength;             // длина пути (moves.size())
+    time_t startTime;
+
+
 
     bool depthSearch_recursive(const Situation& current, int depth, int depthLimit);
     bool wideSearch(const Situation& start, int depthLimit);
     bool gradientSearch(const Situation& start, int maxSteps);
     bool branchAndBound(const Situation& start, int maxNodes);
+    bool uniformCostSearch(const Situation& start, int maxNodes);
 
 public:
     Solver(const Situation& goalSituation, bool debug = false);
@@ -33,6 +40,18 @@ public:
     // depthLimit — опциональное ограничение глубины для DFS
     bool solve(const Situation& start, SearchType type = SearchType::DepthSearch, int depthLimit = 1000000);
     void printSolution() const;
+
+    void printStats() const;
+
+    int getMaxDepth() const { return maxDepth; }
+    int getSolutionLength() const { return solutionLength; }
+    long long getNodesExpanded() const { return nodesExpanded; }
+
+    double getBranchingFactor() const {
+        if (solutionLength == 0) return 0.0;
+        return double(nodesExpanded) / double(solutionLength);
+    }
+
 };
 
 #endif // SOLVER_H

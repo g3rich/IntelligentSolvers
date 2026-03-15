@@ -25,9 +25,9 @@ int main() {
     std::wcout << L"Целевая ситуация:\n";
     goal.printBoard();
 
-    Solver solver(goal /*цель*/, /*debug=*/true);
+    Solver solver(goal /*цель*/, /*debug=*/false);
 
-    std::wcout << L"Выберите метод: 1 - в глубину, 2 - в ширину, 3 - по градиенту, 4 - ветвей и границ: ";
+    std::wcout << L"Выберите метод: 1 - в глубину, 2 - в ширину, 3 - по градиенту, 4 - ветвей и границ, 5 - равных цен: ";
     int choice;
     std::cin >> choice;
     // SearchType type = (choice == 2 ? SearchType::WideSearch : SearchType::DepthSearch);
@@ -36,7 +36,8 @@ int main() {
     if (choice == 1) type = SearchType::DepthSearch;
     else if (choice == 2) type = SearchType::WideSearch;
     else if (choice == 3) type = SearchType::GradientSearch;
-    else type = SearchType::BranchAndBoundSearch;
+    else if (choice == 4) type = SearchType::BranchAndBoundSearch;
+    else type = SearchType::UniformCostSearch;
 
     int depthLimit = 40;
     if (type == SearchType::GradientSearch) {
